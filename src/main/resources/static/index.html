@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anonix</title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="/vendor/sockjs.min.js" defer></script>
+    <script src="/vendor/stomp.min.js" defer></script>
+    <script src="/app.js" defer></script>
+</head>
+<body>
+<div class="page-shell">
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+    <div class="ambient ambient-three"></div>
+
+    <main class="app-shell">
+        <header class="topbar">
+            <div class="brand-block">
+                <div class="brand-orb"></div>
+                <div class="brand-copy">
+                    <span class="brand-eyebrow">Защищенные временные комнаты</span>
+                    <h1 class="brand-title">Anonix</h1>
+                    <p class="brand-subtitle">Анонимный чат с локальным ключом, темной темой и удобным входом.</p>
+                </div>
+            </div>
+
+            <div class="topbar-actions">
+                <div class="identity-chip" id="identityChip" hidden>
+                    <span class="chip-label">Псевдоним</span>
+                    <span class="chip-value" id="aliasDisplay">Скрыт</span>
+                </div>
+                <span class="room-pill" id="roomIdDisplay" title="">Комната не выбрана</span>
+                <button class="ghost-btn" id="shareRoomBtn" hidden>Поделиться</button>
+                <button class="ghost-btn" id="copyRoomBtn" hidden>Скопировать ссылку</button>
+                <button class="ghost-btn danger-btn" id="logoutBtn" hidden>Выйти</button>
+            </div>
+        </header>
+
+        <section class="join-panel" id="joinPanel">
+            <div class="hero-card">
+                <span class="section-kicker">Приватный режим</span>
+                <h2 class="hero-title">Быстрый вход в анонимную комнату без лишнего шума.</h2>
+                <p class="hero-text">
+                    Ключ приглашения хранится в адресе после символа <code>#</code>, не отправляется на сервер
+                    и позволяет делиться комнатой одной ссылкой.
+                </p>
+
+                <a
+                    class="telegram-cta"
+                    href="https://t.me/anonixmsg"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Перейти в Telegram-канал Anonix"
+                >
+                    <span class="telegram-cta-badge">Telegram</span>
+                    <span class="telegram-cta-copy">
+                        <strong>Зайдите в Telegram-канал Anonix</strong>
+                        <span>Там выходят анонсы обновлений, заметки по безопасности и важные новости сервиса.</span>
+                    </span>
+                    <span class="telegram-cta-link">
+                        <span>t.me/anonixmsg</span>
+                        <span class="telegram-cta-arrow" aria-hidden="true">↗</span>
+                    </span>
+                </a>
+
+                <div class="feature-grid">
+                    <article class="feature-card">
+                        <span class="feature-title">Простое создание</span>
+                        <p>Можно сразу сгенерировать новую комнату или ввести свой идентификатор вручную.</p>
+                    </article>
+                    <article class="feature-card">
+                        <span class="feature-title">Уникальные псевдонимы</span>
+                        <p>Каждый участник получает отдельный alias, поэтому переписка не выглядит как поток от одного пользователя.</p>
+                    </article>
+                    <article class="feature-card">
+                        <span class="feature-title">Ваши данные полностью защищены</span>
+                        <p>Никто, даже администрация не знает ваши данные и не имеет доступа к вашим чатам.</p>
+                    </article>
+                </div>
+            </div>
+
+            <div class="entry-card">
+                <div class="entry-header">
+                    <span class="section-kicker">Вход</span>
+                    <h3 class="entry-title">Откройте существующую комнату или создайте новую.</h3>
+                    <p class="entry-subtitle">Если поле оставить пустым, защищенный идентификатор комнаты будет создан автоматически.</p>
+                </div>
+
+                <label class="field-label" for="roomIdInput">Идентификатор комнаты</label>
+                <input
+                    type="text"
+                    id="roomIdInput"
+                    placeholder="Например: my_secure_room"
+                    autocomplete="off"
+                    spellcheck="false"
+                    autocapitalize="off"
+                    autocorrect="off"
+                >
+
+                <div class="entry-note">Допустимы буквы, цифры, дефис и нижнее подчеркивание. Длина: 12-64 символа.</div>
+
+                <div class="entry-actions">
+                    <button class="primary-btn" id="joinBtn">Войти</button>
+                    <button class="ghost-btn" id="createRoomBtn">Создать комнату</button>
+                </div>
+            </div>
+        </section>
+
+        <section class="room-controls" id="roomControls" hidden>
+            <div class="controls-copy">
+                <span class="section-kicker">Комната</span>
+                <div class="controls-title">Настройки и приглашение</div>
+                <p class="controls-subtitle" id="roomControlHint">После входа здесь появятся параметры комнаты.</p>
+            </div>
+
+            <div class="settings-grid">
+                <label class="toggle-card" for="allowOthersToggle">
+                    <div class="toggle-copy">
+                        <span class="toggle-title">Пускать новых участников</span>
+                        <span class="toggle-description">Если выключить, новые участники не смогут присоединяться.</span>
+                    </div>
+                    <input type="checkbox" id="allowOthersToggle">
+                    <span class="toggle-ui"></span>
+                </label>
+
+                <label class="toggle-card" for="autoCleanupToggle">
+                    <div class="toggle-copy">
+                        <span class="toggle-title">Автоочистка комнаты</span>
+                        <span class="toggle-description">Удаляет историю комнаты, если эта опция включена на сервере.</span>
+                    </div>
+                    <input type="checkbox" id="autoCleanupToggle">
+                    <span class="toggle-ui"></span>
+                </label>
+
+                <button class="primary-btn settings-save-btn" id="saveSettingsBtn">Сохранить настройки</button>
+            </div>
+        </section>
+
+        <section class="messages" id="messagesArea">
+            <div class="system-message">Создайте комнату или откройте полную ссылку-приглашение, чтобы начать чат.</div>
+        </section>
+
+        <footer class="input-area" id="inputArea" hidden>
+            <input
+                type="text"
+                id="messageInput"
+                placeholder="Напишите сообщение..."
+                autocomplete="off"
+                spellcheck="false"
+                autocapitalize="off"
+                autocorrect="off"
+            >
+            <button class="send-btn" id="sendBtn" aria-label="Отправить сообщение">
+                <span>&uarr;</span>
+            </button>
+        </footer>
+
+        <div class="status" id="status">Отключено</div>
+    </main>
+</div>
+</body>
+</html>

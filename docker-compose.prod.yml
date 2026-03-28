@@ -1,0 +1,43 @@
+services:
+  app:
+    image: ${APP_IMAGE}
+    restart: unless-stopped
+    environment:
+      PORT: 8080
+      SPRING_PROFILES_ACTIVE: prod
+      CHAT_DATASOURCE_URL: ${CHAT_DATASOURCE_URL:-jdbc:h2:mem:anonymouschat;DB_CLOSE_DELAY=-1}
+      CHAT_DATASOURCE_USERNAME: ${CHAT_DATASOURCE_USERNAME:-sa}
+      CHAT_DATASOURCE_PASSWORD: ${CHAT_DATASOURCE_PASSWORD:-}
+      CHAT_PERSIST_HISTORY: ${CHAT_PERSIST_HISTORY:-false}
+      CHAT_SESSION_LIFETIME_MINUTES: ${CHAT_SESSION_LIFETIME_MINUTES:-30}
+      CHAT_MAX_MESSAGE_LENGTH: ${CHAT_MAX_MESSAGE_LENGTH:-4096}
+      CHAT_CLEANUP_MESSAGES_MS: ${CHAT_CLEANUP_MESSAGES_MS:-300000}
+      CHAT_CLEANUP_SESSIONS_MS: ${CHAT_CLEANUP_SESSIONS_MS:-300000}
+      CHAT_CLEANUP_AUTO_MS: ${CHAT_CLEANUP_AUTO_MS:-300000}
+      JAVA_OPTS: ${JAVA_OPTS:--XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0}
+    expose:
+      - "8080"
+    stop_grace_period: 30s
+    volumes:
+      - app_data:/data
+
+  caddy:
+    image: caddy:2.8
+    restart: unless-stopped
+    depends_on:
+      - app
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  app_data:
+  caddy_data:
+  caddy_config:

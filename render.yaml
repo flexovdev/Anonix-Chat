@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: anonix
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: starter
+    autoDeployTrigger: commit
+    healthCheckPath: /actuator/health
+    maxShutdownDelaySeconds: 30

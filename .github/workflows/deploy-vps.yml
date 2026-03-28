@@ -1,0 +1,99 @@
+name: Deploy VPS
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Тег образа для выката, например latest или sha-<commit>"
+        required: true
+        default: latest
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare SSH access
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          test -n "${VPS_HOST}" && test -n "${VPS_USER}" && test -n "${VPS_SSH_KEY}"
+          mkdir -p ~/.ssh
+          printf '%s' "${VPS_SSH_KEY}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${VPS_HOST}" >> ~/.ssh/known_hosts
+
+      - name: Generate production env file
+        env:
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+          IMAGE_TAG: ${{ github.event.inputs.image_tag }}
+          APP_DOMAIN: ${{ secrets.APP_DOMAIN }}
+          ACME_EMAIL: ${{ secrets.ACME_EMAIL }}
+          CHAT_DATASOURCE_URL: ${{ secrets.CHAT_DATASOURCE_URL }}
+          CHAT_DATASOURCE_USERNAME: ${{ secrets.CHAT_DATASOURCE_USERNAME }}
+          CHAT_DATASOURCE_PASSWORD: ${{ secrets.CHAT_DATASOURCE_PASSWORD }}
+          CHAT_PERSIST_HISTORY: ${{ secrets.CHAT_PERSIST_HISTORY }}
+          CHAT_SESSION_LIFETIME_MINUTES: ${{ secrets.CHAT_SESSION_LIFETIME_MINUTES }}
+          CHAT_MAX_MESSAGE_LENGTH: ${{ secrets.CHAT_MAX_MESSAGE_LENGTH }}
+          CHAT_CLEANUP_MESSAGES_MS: ${{ secrets.CHAT_CLEANUP_MESSAGES_MS }}
+          CHAT_CLEANUP_SESSIONS_MS: ${{ secrets.CHAT_CLEANUP_SESSIONS_MS }}
+          CHAT_CLEANUP_AUTO_MS: ${{ secrets.CHAT_CLEANUP_AUTO_MS }}
+          JAVA_OPTS: ${{ secrets.JAVA_OPTS }}
+        run: |
+          test -n "${APP_DOMAIN}" && test -n "${ACME_EMAIL}"
+          owner="$(echo "${REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
+
+          cat > .env.production <<EOF
+          APP_DOMAIN=${APP_DOMAIN}
+          ACME_EMAIL=${ACME_EMAIL}
+          APP_IMAGE=ghcr.io/${owner}/anonix:${IMAGE_TAG}
+          CHAT_DATASOURCE_URL=${CHAT_DATASOURCE_URL:-jdbc:h2:mem:anonymouschat;DB_CLOSE_DELAY=-1}
+          CHAT_DATASOURCE_USERNAME=${CHAT_DATASOURCE_USERNAME:-sa}
+          CHAT_DATASOURCE_PASSWORD=${CHAT_DATASOURCE_PASSWORD}
+          CHAT_PERSIST_HISTORY=${CHAT_PERSIST_HISTORY:-false}
+          CHAT_SESSION_LIFETIME_MINUTES=${CHAT_SESSION_LIFETIME_MINUTES:-30}
+          CHAT_MAX_MESSAGE_LENGTH=${CHAT_MAX_MESSAGE_LENGTH:-4096}
+          CHAT_CLEANUP_MESSAGES_MS=${CHAT_CLEANUP_MESSAGES_MS:-300000}
+          CHAT_CLEANUP_SESSIONS_MS=${CHAT_CLEANUP_SESSIONS_MS:-300000}
+          CHAT_CLEANUP_AUTO_MS=${CHAT_CLEANUP_AUTO_MS:-300000}
+          JAVA_OPTS=${JAVA_OPTS:--XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0}
+          EOF
+
+      - name: Upload deployment files
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          ssh "${VPS_USER}@${VPS_HOST}" "mkdir -p ~/anonix"
+          scp docker-compose.prod.yml Caddyfile .env.production "${VPS_USER}@${VPS_HOST}:~/anonix/"
+
+      - name: Deploy services on VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          ssh "${VPS_USER}@${VPS_HOST}" "
+            cd ~/anonix && \
+            docker compose --env-file .env.production -f docker-compose.prod.yml pull && \
+            docker compose --env-file .env.production -f docker-compose.prod.yml up -d --remove-orphans
+          "
+
+      - name: Verify public health endpoint
+        env:
+          APP_DOMAIN: ${{ secrets.APP_DOMAIN }}
+        run: |
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            if curl --fail --silent --show-error "https://${APP_DOMAIN}/actuator/health" > /dev/null; then
+              exit 0
+            fi
+            sleep 10
+          done
+          exit 1
