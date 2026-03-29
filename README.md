@@ -1,4 +1,5 @@
 # Anonix
+<img width="1888" height="898" alt="image" src="https://github.com/user-attachments/assets/138a7478-787a-4903-b04a-f076854b5bb1" />
 
 Anonix - временный анонимный чат на Spring Boot с WebSocket/STOMP и встроенным браузерным клиентом. Один сервис отдает UI, REST API и WebSocket endpoint.
 
